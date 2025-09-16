@@ -40,8 +40,7 @@ sheet = connect_gsheet()
 
 
 @st.cache_data(ttl=60)
-with st.spinner("Loading data..."):
-    df = load_data():
+def load_data():
     vals = sheet.get_all_values()
     if not vals:
         return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","Category","AddedBy","Timestamp"])
@@ -56,7 +55,9 @@ with st.spinner("Loading data..."):
 def append_row(name, lat, lng, sales, category, added_by):
     sheet.append_row([name, float(lat), float(lng), float(sales), category, added_by, datetime.utcnow().isoformat()])
 
-df = load_data()
+# Use spinner only when calling the function
+with st.spinner("Loading data..."):
+    df = load_data()
 
 # -----------------------------
 # SIDEBAR: ADD LOCATION
@@ -257,6 +258,7 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 
 
