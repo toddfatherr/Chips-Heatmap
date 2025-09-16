@@ -47,7 +47,7 @@ def load_data():
     """Pull fresh data from Google Sheets"""
     vals = sheet.get_all_values()
     if not vals:
-        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","Category","AddedBy","Timestamp"])
+        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp", "Cateogry"])
     df = pd.DataFrame(vals[1:], columns=vals[0])
     df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
@@ -57,7 +57,7 @@ def load_data():
     return df.dropna(subset=["Latitude","Longitude"])
 
 def append_row(name, lat, lng, sales, category, added_by):
-    sheet.append_row([name, float(lat), float(lng), float(sales), category, added_by, datetime.utcnow().isoformat()])
+    sheet.append_row([name, float(lat), float(lng), float(sales), added_by, datetime.utcnow().isoformat(), category])
 
 # Initialize session state for data
 if "df" not in st.session_state:
@@ -288,4 +288,5 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
 
