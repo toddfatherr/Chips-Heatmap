@@ -7,6 +7,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 from datetime import datetime
 import itertools
+import time
 
 st.set_page_config(page_title="Chicago Sales Map", layout="wide")
 
@@ -38,9 +39,12 @@ def connect_gsheet():
 
 sheet = connect_gsheet()
 
-
-@st.cache_data(ttl=60)
+# -----------------------------
+# DATA LOADING
+# -----------------------------
+@st.cache_data(ttl=300)
 def load_data():
+    """Pull fresh data from Google Sheets"""
     vals = sheet.get_all_values()
     if not vals:
         return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","Category","AddedBy","Timestamp"])
@@ -55,9 +59,12 @@ def load_data():
 def append_row(name, lat, lng, sales, category, added_by):
     sheet.append_row([name, float(lat), float(lng), float(sales), category, added_by, datetime.utcnow().isoformat()])
 
-# Use spinner only when calling the function
-with st.spinner("Loading data..."):
-    df = load_data()
+# Initialize session state for data
+if "df" not in st.session_state:
+    with st.spinner("Loading data..."):
+        st.session_state.df = load_data()
+
+df = st.session_state.df
 
 # -----------------------------
 # SIDEBAR: ADD LOCATION
@@ -78,17 +85,38 @@ if submit:
     else:
         try:
             append_row(name, lat, lng, sales, category, you)
-            st.sidebar.success("Added! Refresh to see it on map.")
-            load_data.clear()
-            df = load_data()
+            st.sidebar.success("Added! Press 'Refresh data' to see it.")
         except Exception as e:
             st.sidebar.error(f"Error: {e}")
 
 # -----------------------------
-# REFRESH BUTTON
+# REFRESH CONTROLS
 # -----------------------------
-if st.button("Refresh data"):
-    df = load_data()
+col1, col2 = st.sidebar.columns(2)
+manual_refresh = col1.button("Refresh data")
+
+auto_refresh = col2.checkbox("Auto Refresh")
+if auto_refresh:
+    refresh_interval = st.sidebar.slider("Interval (minutes)", 1, 30, 5)
+
+# Manual refresh
+if manual_refresh:
+    load_data.clear()
+    with st.spinner("Refreshing data..."):
+        st.session_state.df = load_data()
+    df = st.session_state.df
+
+# Auto refresh
+if auto_refresh:
+    # rerun after selected interval
+    st_autorefresh = st.experimental_rerun  # shorthand
+    st_autorefresh = st.sidebar.empty()
+    count = st.sidebar.empty()
+    st_autorefresh.text(f"⏳ Auto refresh every {refresh_interval} min")
+    time.sleep(refresh_interval * 60)
+    load_data.clear()
+    st.session_state.df = load_data()
+    st.experimental_rerun()
 
 # -----------------------------
 # FILTERING OPTIONS
@@ -245,25 +273,12 @@ st.download_button(
     file_name="chicago_sales.csv",
     mime="text/csv"
 )
+
 # -----------------------------
 # REMOVE GREY FADE OVERLAY
 # -----------------------------
 st.markdown("""
     <style>
-    .stApp > div:first-child {
-        opacity: 1 !important;
-    }
-    .stSpinner {
-        background: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-# -----------------------------
-# REMOVE GREY FADE OVERLAY
-# -----------------------------
-st.markdown("""
-    <style>
-    /* Remove the dimming overlay when Streamlit reruns */
     .stApp {
         opacity: 1 !important;
         transition: none !important;
@@ -273,6 +288,8 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
 
 
 
