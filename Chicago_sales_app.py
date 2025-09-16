@@ -8,6 +8,7 @@ import gspread
 from datetime import datetime
 import itertools
 import time
+import math
 
 st.set_page_config(page_title="Chicago Sales Map", layout="wide")
 
@@ -49,9 +50,7 @@ def load_data():
     if not vals:
         return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp","Category"])
     df = pd.DataFrame(vals[1:], columns=vals[0])
-    
-    # Ensure numeric conversion works
-    df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce").fillna(0)
+    df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
     df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
     if "Timestamp" in df.columns:
@@ -77,7 +76,7 @@ with st.sidebar.form("add_form", clear_on_submit=True):
     lat = st.text_input("Latitude*")
     lng = st.text_input("Longitude*")
     sales = st.number_input("Sales ($)", min_value=0.0, step=10.0)
-    category = st.selectbox("Category*", ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/cafe", "Other"])
+    category = st.selectbox("Category*", ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/Cafe", "Other"])
     you = st.text_input("Your name", placeholder="optional")
     submit = st.form_submit_button("Add to sheet")
 
@@ -110,7 +109,6 @@ if manual_refresh:
 
 # Auto refresh
 if auto_refresh:
-    st.sidebar.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -129,14 +127,16 @@ if not df.empty:
     )
     df = df[df["Category"].isin(selected_categories)]
 
-    # Sales range filter (patched so JP Graziano always shows)
+    # Sales range filter (rounded up to nearest 1000)
     min_sales = int(df["Sales"].min())
     max_sales = int(df["Sales"].max())
+    max_sales_rounded = int(math.ceil(max_sales / 1000.0) * 1000)
+
     sales_range = st.sidebar.slider(
         "Filter by Sales ($)",
         min_value=min_sales,
-        max_value=max_sales,
-        value=(min_sales, max_sales),
+        max_value=max_sales_rounded,
+        value=(min_sales, max_sales_rounded),
         step=1
     )
     df = df[(df["Sales"] >= sales_range[0]) & (df["Sales"] <= sales_range[1])]
@@ -186,7 +186,7 @@ category_colors = {
     "Deli": "blue",
     "Grocery/Liquor Store": "green",
     "Hotel": "purple",
-    "Restaurant/cafe": "red",
+    "Restaurant/Cafe": "red",
     "Other": "orange"
 }
 color_cycle = itertools.cycle(["cadetblue","pink","darkred","darkblue","darkgreen","lightgray","black"])
@@ -293,11 +293,3 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
