@@ -40,7 +40,8 @@ sheet = connect_gsheet()
 
 
 @st.cache_data(ttl=60)
-def load_data():
+with st.spinner("Loading data..."):
+    df = load_data():
     vals = sheet.get_all_values()
     if not vals:
         return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","Category","AddedBy","Timestamp"])
@@ -243,4 +244,19 @@ st.download_button(
     file_name="chicago_sales.csv",
     mime="text/csv"
 )
+# -----------------------------
+# REMOVE GREY FADE OVERLAY
+# -----------------------------
+st.markdown("""
+    <style>
+    .stApp > div:first-child {
+        opacity: 1 !important;
+    }
+    .stSpinner {
+        background: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
 
