@@ -47,7 +47,7 @@ def load_data():
     """Pull fresh data from Google Sheets"""
     vals = sheet.get_all_values()
     if not vals:
-        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp", "Cateogry"])
+        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp","Category"])
     df = pd.DataFrame(vals[1:], columns=vals[0])
     df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
@@ -75,7 +75,7 @@ with st.sidebar.form("add_form", clear_on_submit=True):
     lat = st.text_input("Latitude*")
     lng = st.text_input("Longitude*")
     sales = st.number_input("Sales ($)", min_value=0.0, step=10.0)
-    category = st.selectbox("Category*", ["Deli", "Grocery", "Hotel", "Restaurant", "Other"])
+    category = st.selectbox("Category*", ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/cafe", "Other"])
     you = st.text_input("Your name", placeholder="optional")
     submit = st.form_submit_button("Add to sheet")
 
@@ -108,11 +108,6 @@ if manual_refresh:
 
 # Auto refresh
 if auto_refresh:
-    # rerun after selected interval
-    st_autorefresh = st.experimental_rerun  # shorthand
-    st_autorefresh = st.sidebar.empty()
-    count = st.sidebar.empty()
-    st_autorefresh.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -179,9 +174,9 @@ view_type = st.radio("Map view:", ["Markers", "Heatmap"], horizontal=True)
 
 category_colors = {
     "Deli": "blue",
-    "Grocery": "green",
+    "Grocery/Liquor Store": "green",
     "Hotel": "purple",
-    "Restaurant": "red",
+    "Restaurant/cafe": "red",
     "Other": "orange"
 }
 color_cycle = itertools.cycle(["cadetblue","pink","darkred","darkblue","darkgreen","lightgray","black"])
@@ -288,5 +283,7 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
 
 
