@@ -44,26 +44,21 @@ sheet = connect_gsheet()
 # -----------------------------
 @st.cache_data(ttl=300)
 def load_data():
-    """Pull fresh data from Google Sheets"""
     vals = sheet.get_all_values()
     if not vals:
         return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp","Category"])
+    
+    # Create DataFrame and fix header issue
+    df = pd.DataFrame(vals)
+    df.columns = df.iloc[0]   # first row = headers
+    df = df.drop(0).reset_index(drop=True)  # drop header row from data
 
-    # Keep all rows (don’t drop JP Graziano row)
-    df = pd.DataFrame(vals[1:], columns=vals[0])
-
-    # Convert numbers
+    # Ensure correct data types
     df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
     df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
-
-    # Convert timestamp
     if "Timestamp" in df.columns:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
-
-    # Drop only rows with no name
-    df = df[df["Name"].str.strip() != ""]
-
     return df.dropna(subset=["Latitude","Longitude"])
 
 def append_row(name, lat, lng, sales, category, added_by):
@@ -118,8 +113,6 @@ if manual_refresh:
 
 # Auto refresh
 if auto_refresh:
-    st_autorefresh = st.sidebar.empty()
-    st_autorefresh.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -295,6 +288,7 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 
 
