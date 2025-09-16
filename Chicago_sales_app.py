@@ -47,7 +47,7 @@ def load_data():
     """Pull fresh data from Google Sheets"""
     vals = sheet.get_all_values()
     if not vals:
-        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","Category","AddedBy","Timestamp"])
+        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp","Category"])
     df = pd.DataFrame(vals[1:], columns=vals[0])
     df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
@@ -55,7 +55,7 @@ def load_data():
     if "Timestamp" in df.columns:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
 
-    # Ensure category values use new labels
+    # Normalize categories
     df["Category"] = df["Category"].replace({
         "Restaurant": "Restaurant/cafe",
         "Grocery": "Grocery/Liquor Store"
@@ -64,13 +64,9 @@ def load_data():
     return df.dropna(subset=["Latitude","Longitude"])
 
 def append_row(name, lat, lng, sales, category, added_by):
-    # Normalize categories on save
-    if category == "Restaurant":
-        category = "Restaurant/cafe"
-    elif category == "Grocery":
-        category = "Grocery/Liquor Store"
-
-    sheet.append_row([name, float(lat), float(lng), float(sales), category, added_by, datetime.utcnow().isoformat()])
+    # Normalize before saving
+    category = category.replace("Restaurant", "Restaurant/cafe").replace("Grocery", "Grocery/Liquor Store")
+    sheet.append_row([name, float(lat), float(lng), float(sales), added_by, datetime.utcnow().isoformat(), category])
 
 # Initialize session state for data
 if "df" not in st.session_state:
@@ -121,7 +117,8 @@ if manual_refresh:
 
 # Auto refresh
 if auto_refresh:
-    st.sidebar.text(f"⏳ Auto refresh every {refresh_interval} min")
+    st_autorefresh = st.sidebar.empty()
+    st_autorefresh.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -131,6 +128,7 @@ if auto_refresh:
 # FILTERING OPTIONS
 # -----------------------------
 if not df.empty:
+    # Category filter
     all_categories = sorted(df["Category"].dropna().unique())
     selected_categories = st.sidebar.multiselect(
         "Filter by Category", 
@@ -139,10 +137,12 @@ if not df.empty:
     )
     df = df[df["Category"].isin(selected_categories)]
 
+    # Sales range filter
     min_sales, max_sales = int(df["Sales"].min()), int(df["Sales"].max())
     sales_range = st.sidebar.slider("Filter by Sales ($)", min_sales, max_sales, (min_sales, max_sales))
     df = df[(df["Sales"] >= sales_range[0]) & (df["Sales"] <= sales_range[1])]
 
+    # Time filter
     if "Timestamp" in df.columns and df["Timestamp"].notna().any():
         min_date, max_date = df["Timestamp"].min(), df["Timestamp"].max()
         date_range = st.sidebar.date_input("Filter by Date Range", [min_date, max_date])
@@ -294,6 +294,7 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 
 
