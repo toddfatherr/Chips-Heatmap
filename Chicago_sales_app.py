@@ -5,6 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 from datetime import datetime
 import time
+import requests
 
 st.set_page_config(page_title="Chicago Sales Map", layout="wide")
 
@@ -54,7 +55,22 @@ def load_data():
 def append_row(name, lat, lng, sales, category, added_by):
     sheet.append_row([name, float(lat), float(lng), float(sales), category, added_by, datetime.utcnow().isoformat()])
 
-# Initialize session state for data
+# -----------------------------
+# NEIGHBORHOODS GEOJSON
+# -----------------------------
+@st.cache_data
+def load_chicago_geojson():
+    url = "https://raw.githubusercontent.com/blackmad/neighborhoods/master/chicago.geojson"
+    try:
+        return requests.get(url).json()
+    except:
+        return None
+
+geojson_data = load_chicago_geojson()
+
+# -----------------------------
+# INITIAL DATA
+# -----------------------------
 if "df" not in st.session_state:
     with st.spinner("Loading data..."):
         st.session_state.df = load_data()
@@ -94,14 +110,12 @@ auto_refresh = col2.checkbox("Auto Refresh")
 if auto_refresh:
     refresh_interval = st.sidebar.slider("Interval (minutes)", 1, 30, 5)
 
-# Manual refresh
 if manual_refresh:
     load_data.clear()
     with st.spinner("Refreshing data..."):
         st.session_state.df = load_data()
     df = st.session_state.df
 
-# Auto refresh
 if auto_refresh:
     st.sidebar.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
@@ -113,7 +127,6 @@ if auto_refresh:
 # FILTERING OPTIONS
 # -----------------------------
 if not df.empty:
-    # Category filter
     all_categories = sorted(df["Category"].dropna().unique())
     selected_categories = st.sidebar.multiselect(
         "Filter by Category",
@@ -122,12 +135,10 @@ if not df.empty:
     )
     df = df[df["Category"].isin(selected_categories)]
 
-    # Sales range filter
     min_sales, max_sales = int(df["Sales"].min()), int(df["Sales"].max())
     sales_range = st.sidebar.slider("Filter by Sales ($)", min_sales, max_sales, (min_sales, max_sales))
     df = df[(df["Sales"] >= sales_range[0]) & (df["Sales"] <= sales_range[1])]
 
-    # Time filter
     if "Timestamp" in df.columns and df["Timestamp"].notna().any():
         min_date, max_date = df["Timestamp"].min(), df["Timestamp"].max()
         date_range = st.sidebar.date_input("Filter by Date Range", [min_date, max_date])
@@ -136,33 +147,61 @@ if not df.empty:
             df = df[(df["Timestamp"] >= start_date) & (df["Timestamp"] <= end_date)]
 
 # -----------------------------
+# CATEGORY COLORS
+# -----------------------------
+category_colors = {
+    "Deli": [0, 0, 255],       # Blue
+    "Grocery": [0, 200, 0],    # Green
+    "Hotel": [128, 0, 128],    # Purple
+    "Restaurant": [255, 0, 0], # Red
+    "Other": [255, 165, 0]     # Orange
+}
+df["color"] = df["Category"].map(category_colors).fillna([200, 200, 200])
+
+# -----------------------------
 # PYDECK MAP
 # -----------------------------
 st.markdown("### Chicago Sales Map")
 
 if not df.empty:
-    # Scale marker size by sales
     df["size"] = (df["Sales"] / df["Sales"].max()) * 1000
 
     view_type = st.radio("Map view:", ["Markers", "Heatmap"], horizontal=True)
 
+    layers = []
+
+    if geojson_data:
+        layers.append(
+            pdk.Layer(
+                "GeoJsonLayer",
+                geojson_data,
+                stroked=True,
+                filled=False,
+                get_line_color=[200, 200, 200],
+                line_width_min_pixels=1,
+            )
+        )
+
     if view_type == "Markers":
-        layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=df,
-            get_position=["Longitude", "Latitude"],
-            get_radius="size",
-            get_fill_color=[255, 0, 0],  # red markers
-            pickable=True,
-            opacity=0.6,
+        layers.append(
+            pdk.Layer(
+                "ScatterplotLayer",
+                data=df,
+                get_position=["Longitude", "Latitude"],
+                get_radius="size",
+                get_fill_color="color",
+                pickable=True,
+                opacity=0.6,
+            )
         )
     else:
-        layer = pdk.Layer(
-            "HeatmapLayer",
-            data=df,
-            get_position=["Longitude", "Latitude"],
-            get_weight="Sales",
-            aggregation=pdk.types.String("SUM"),
+        layers.append(
+            pdk.Layer(
+                "HeatmapLayer",
+                data=df,
+                get_position=["Longitude", "Latitude"],
+                get_weight="Sales",
+            )
         )
 
     view_state = pdk.ViewState(
@@ -173,10 +212,15 @@ if not df.empty:
     )
 
     st.pydeck_chart(pdk.Deck(
-        layers=[layer],
+        layers=layers,
         initial_view_state=view_state,
         tooltip={"text": "{Name}\nSales: ${Sales}\nCategory: {Category}"}
     ))
+
+    # Legend
+    st.markdown("### Category Legend")
+    for cat, color in category_colors.items():
+        st.markdown(f"<span style='color:rgb{tuple(color)};'>⬤</span> {cat}", unsafe_allow_html=True)
 else:
     st.info("No data available")
 
@@ -215,6 +259,8 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
 
 
 
