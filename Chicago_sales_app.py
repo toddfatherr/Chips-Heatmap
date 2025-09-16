@@ -48,14 +48,23 @@ def load_data():
     vals = sheet.get_all_values()
     if not vals:
         return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp","Category"])
+
+    # Keep all rows (don’t drop JP Graziano row)
     df = pd.DataFrame(vals[1:], columns=vals[0])
+
+    # Convert numbers
     df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
     df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
+
+    # Convert timestamp
     if "Timestamp" in df.columns:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
-    df = df.dropna(subset=["Latitude","Longitude"])
-    return df
+
+    # Drop only rows with no name
+    df = df[df["Name"].str.strip() != ""]
+
+    return df.dropna(subset=["Latitude","Longitude"])
 
 def append_row(name, lat, lng, sales, category, added_by):
     sheet.append_row([name, float(lat), float(lng), float(sales), added_by, datetime.utcnow().isoformat(), category])
@@ -76,10 +85,7 @@ with st.sidebar.form("add_form", clear_on_submit=True):
     lat = st.text_input("Latitude*")
     lng = st.text_input("Longitude*")
     sales = st.number_input("Sales ($)", min_value=0.0, step=10.0)
-    category = st.selectbox(
-        "Category*",
-        ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/cafe", "Other"]
-    )
+    category = st.selectbox("Category*", ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/cafe", "Other"])
     you = st.text_input("Your name", placeholder="optional")
     submit = st.form_submit_button("Add to sheet")
 
@@ -112,6 +118,8 @@ if manual_refresh:
 
 # Auto refresh
 if auto_refresh:
+    st_autorefresh = st.sidebar.empty()
+    st_autorefresh.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -229,7 +237,7 @@ def add_legend(map_obj, category_colors, df):
     legend_html = f"""
     <div style="
         position: fixed; 
-        bottom: 50px; left: 50px; width: 200px; 
+        bottom: 50px; left: 50px; width: 220px; 
         background-color: rgba(0, 0, 0, 0.6);
         border-radius: 8px;
         z-index:9999; 
@@ -263,21 +271,15 @@ if not df.empty:
     ).reset_index()
     st.dataframe(summary)
 
-# -----------------------------
-# FIX INDEX TO MATCH GOOGLE SHEETS
-# -----------------------------
-if not df.empty:
-    df = df.reset_index(drop=True)
-    df.index = df.index + 2  # Row 2 in Sheets = first data row
-    st.markdown("### Current Data")
-    st.dataframe(df)
+st.markdown("### Current Data")
+st.dataframe(df)
 
-    st.download_button(
-        "Download CSV",
-        data=df.to_csv(index=True).encode("utf-8"),
-        file_name="chicago_sales.csv",
-        mime="text/csv"
-    )
+st.download_button(
+    "Download CSV",
+    data=df.to_csv(index=False).encode("utf-8"),
+    file_name="chicago_sales.csv",
+    mime="text/csv"
+)
 
 # -----------------------------
 # REMOVE GREY FADE OVERLAY
@@ -293,6 +295,7 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 
 
