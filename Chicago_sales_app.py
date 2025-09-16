@@ -258,6 +258,22 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+# -----------------------------
+# REMOVE GREY FADE OVERLAY
+# -----------------------------
+st.markdown("""
+    <style>
+    /* Remove the dimming overlay when Streamlit reruns */
+    .stApp {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+    [data-testid="stStatusWidget"] {
+        visibility: hidden;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 
 
 
