@@ -4,8 +4,6 @@ import pydeck as pdk
 from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 from datetime import datetime
-import time
-import requests
 
 st.set_page_config(page_title="Chicago Sales Map", layout="wide")
 
@@ -28,6 +26,7 @@ if password != st.secrets["app_password"]:
 def connect_gsheet():
     scope = ["https://spreadsheets.google.com/feeds",
              "https://www.googleapis.com/auth/drive"]
+
     creds = ServiceAccountCredentials.from_json_keyfile_dict(
         dict(st.secrets["gcp_service_account"]), scope
     )
@@ -55,22 +54,7 @@ def load_data():
 def append_row(name, lat, lng, sales, category, added_by):
     sheet.append_row([name, float(lat), float(lng), float(sales), category, added_by, datetime.utcnow().isoformat()])
 
-# -----------------------------
-# NEIGHBORHOODS GEOJSON
-# -----------------------------
-@st.cache_data
-def load_chicago_geojson():
-    url = "https://raw.githubusercontent.com/blackmad/neighborhoods/master/chicago.geojson"
-    try:
-        return requests.get(url).json()
-    except:
-        return None
-
-geojson_data = load_chicago_geojson()
-
-# -----------------------------
-# INITIAL DATA
-# -----------------------------
+# Load once into session state
 if "df" not in st.session_state:
     with st.spinner("Loading data..."):
         st.session_state.df = load_data()
@@ -101,27 +85,13 @@ if submit:
             st.sidebar.error(f"Error: {e}")
 
 # -----------------------------
-# REFRESH CONTROLS
+# REFRESH BUTTON
 # -----------------------------
-col1, col2 = st.sidebar.columns(2)
-manual_refresh = col1.button("Refresh data")
-
-auto_refresh = col2.checkbox("Auto Refresh")
-if auto_refresh:
-    refresh_interval = st.sidebar.slider("Interval (minutes)", 1, 30, 5)
-
-if manual_refresh:
+if st.sidebar.button("Refresh data"):
     load_data.clear()
     with st.spinner("Refreshing data..."):
         st.session_state.df = load_data()
     df = st.session_state.df
-
-if auto_refresh:
-    st.sidebar.text(f"⏳ Auto refresh every {refresh_interval} min")
-    time.sleep(refresh_interval * 60)
-    load_data.clear()
-    st.session_state.df = load_data()
-    st.experimental_rerun()
 
 # -----------------------------
 # FILTERING OPTIONS
@@ -129,8 +99,8 @@ if auto_refresh:
 if not df.empty:
     all_categories = sorted(df["Category"].dropna().unique())
     selected_categories = st.sidebar.multiselect(
-        "Filter by Category",
-        options=all_categories,
+        "Filter by Category", 
+        options=all_categories, 
         default=all_categories
     )
     df = df[df["Category"].isin(selected_categories)]
@@ -156,76 +126,41 @@ category_colors = {
     "Restaurant": [255, 0, 0], # Red
     "Other": [255, 165, 0]     # Orange
 }
-df["color"] = df["Category"].map(category_colors).fillna([200, 200, 200])
+
+df["color"] = df["Category"].map(category_colors)
+df["color"] = df["color"].apply(lambda x: x if isinstance(x, list) else [200, 200, 200])
 
 # -----------------------------
-# PYDECK MAP
+# BUILD PYDECK MAP
 # -----------------------------
-st.markdown("### Chicago Sales Map")
-
 if not df.empty:
-    df["size"] = (df["Sales"] / df["Sales"].max()) * 1000
+    st.markdown("### Chicago Sales Map")
 
-    view_type = st.radio("Map view:", ["Markers", "Heatmap"], horizontal=True)
-
-    layers = []
-
-    if geojson_data:
-        layers.append(
-            pdk.Layer(
-                "GeoJsonLayer",
-                geojson_data,
-                stroked=True,
-                filled=False,
-                get_line_color=[200, 200, 200],
-                line_width_min_pixels=1,
-            )
-        )
-
-    if view_type == "Markers":
-        layers.append(
-            pdk.Layer(
-                "ScatterplotLayer",
-                data=df,
-                get_position=["Longitude", "Latitude"],
-                get_radius="size",
-                get_fill_color="color",
-                pickable=True,
-                opacity=0.6,
-            )
-        )
-    else:
-        layers.append(
-            pdk.Layer(
-                "HeatmapLayer",
-                data=df,
-                get_position=["Longitude", "Latitude"],
-                get_weight="Sales",
-            )
-        )
+    layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=df,
+        get_position=["Longitude", "Latitude"],
+        get_radius="Sales",
+        radius_scale=20,
+        get_fill_color="color",
+        pickable=True
+    )
 
     view_state = pdk.ViewState(
-        latitude=df["Latitude"].mean(),
-        longitude=df["Longitude"].mean(),
+        latitude=41.8781,
+        longitude=-87.6298,
         zoom=11,
         pitch=0,
     )
 
-    st.pydeck_chart(pdk.Deck(
-        layers=layers,
-        initial_view_state=view_state,
-        tooltip={"text": "{Name}\nSales: ${Sales}\nCategory: {Category}"}
-    ))
+    tooltip = {"html": "<b>{Name}</b><br>Sales: ${Sales}<br>Category: {Category}<br>Added by: {AddedBy}", "style": {"color": "white"}}
 
-    # Legend
-    st.markdown("### Category Legend")
-    for cat, color in category_colors.items():
-        st.markdown(f"<span style='color:rgb{tuple(color)};'>⬤</span> {cat}", unsafe_allow_html=True)
-else:
-    st.info("No data available")
+    r = pdk.Deck(layers=[layer], initial_view_state=view_state, map_style="mapbox://styles/mapbox/dark-v10", tooltip=tooltip)
+
+    st.pydeck_chart(r)
 
 # -----------------------------
-# SUMMARY + DATA
+# SUMMARY
 # -----------------------------
 if not df.empty:
     st.markdown("### Summary by Category")
@@ -245,20 +180,7 @@ st.download_button(
     mime="text/csv"
 )
 
-# -----------------------------
-# REMOVE GREY FADE OVERLAY
-# -----------------------------
-st.markdown("""
-    <style>
-    .stApp {
-        opacity: 1 !important;
-        transition: none !important;
-    }
-    [data-testid="stStatusWidget"] {
-        visibility: hidden;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
 
 
 
