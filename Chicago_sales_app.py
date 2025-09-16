@@ -44,33 +44,22 @@ sheet = connect_gsheet()
 # -----------------------------
 @st.cache_data(ttl=300)
 def load_data():
+    """Pull fresh data from Google Sheets"""
     vals = sheet.get_all_values()
     if not vals:
-        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","TimeStamp","Category"])
+        return pd.DataFrame(columns=["Name","Latitude","Longitude","Sales","AddedBy","Timestamp","Category"])
     df = pd.DataFrame(vals[1:], columns=vals[0])
-
-    # Convert numeric fields
-    df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
+    
+    # Ensure numeric conversion works
+    df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce").fillna(0)
     df["Latitude"] = pd.to_numeric(df["Latitude"], errors="coerce")
     df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
-
-    # Convert timestamp if it exists
-    if "TimeStamp" in df.columns:
-        df["TimeStamp"] = pd.to_datetime(df["TimeStamp"], errors="coerce")
-
-    # Drop only if lat/lng is missing
+    if "Timestamp" in df.columns:
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
     return df.dropna(subset=["Latitude","Longitude"])
 
 def append_row(name, lat, lng, sales, category, added_by):
-    sheet.append_row([
-        name,
-        float(lat),
-        float(lng),
-        float(sales),
-        added_by,
-        datetime.utcnow().isoformat(),
-        category
-    ])
+    sheet.append_row([name, float(lat), float(lng), float(sales), added_by, datetime.utcnow().isoformat(), category])
 
 # Initialize session state for data
 if "df" not in st.session_state:
@@ -112,13 +101,16 @@ auto_refresh = col2.checkbox("Auto Refresh")
 if auto_refresh:
     refresh_interval = st.sidebar.slider("Interval (minutes)", 1, 30, 5)
 
+# Manual refresh
 if manual_refresh:
     load_data.clear()
     with st.spinner("Refreshing data..."):
         st.session_state.df = load_data()
     df = st.session_state.df
 
+# Auto refresh
 if auto_refresh:
+    st.sidebar.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -128,6 +120,7 @@ if auto_refresh:
 # FILTERING OPTIONS
 # -----------------------------
 if not df.empty:
+    # Category filter
     all_categories = sorted(df["Category"].dropna().unique())
     selected_categories = st.sidebar.multiselect(
         "Filter by Category", 
@@ -136,17 +129,25 @@ if not df.empty:
     )
     df = df[df["Category"].isin(selected_categories)]
 
-    min_sales, max_sales = int(df["Sales"].min()), int(df["Sales"].max())
-    sales_range = st.sidebar.slider("Filter by Sales ($)", min_sales, max_sales, (min_sales, max_sales))
+    # Sales range filter (patched so JP Graziano always shows)
+    min_sales = int(df["Sales"].min())
+    max_sales = int(df["Sales"].max())
+    sales_range = st.sidebar.slider(
+        "Filter by Sales ($)",
+        min_value=min_sales,
+        max_value=max_sales,
+        value=(min_sales, max_sales),
+        step=1
+    )
     df = df[(df["Sales"] >= sales_range[0]) & (df["Sales"] <= sales_range[1])]
 
-    # Time filter only applies if at least some rows have timestamps
-    if "TimeStamp" in df.columns and df["TimeStamp"].notna().any():
-        min_date, max_date = df["TimeStamp"].min(), df["TimeStamp"].max()
+    # Time filter
+    if "Timestamp" in df.columns and df["Timestamp"].notna().any():
+        min_date, max_date = df["Timestamp"].min(), df["Timestamp"].max()
         date_range = st.sidebar.date_input("Filter by Date Range", [min_date, max_date])
         if isinstance(date_range, list) and len(date_range) == 2:
             start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-            df = df[(df["TimeStamp"].isna()) | ((df["TimeStamp"] >= start_date) & (df["TimeStamp"] <= end_date))]
+            df = df[(df["Timestamp"] >= start_date) & (df["Timestamp"] <= end_date)]
 
 # -----------------------------
 # BUILD MAP
@@ -176,6 +177,9 @@ try:
 except:
     pass
 
+# -----------------------------
+# MAP VIEW OPTIONS
+# -----------------------------
 view_type = st.radio("Map view:", ["Markers", "Heatmap"], horizontal=True)
 
 category_colors = {
@@ -190,6 +194,9 @@ for cat in df["Category"].dropna().unique():
     if cat not in category_colors:
         category_colors[cat] = next(color_cycle)
 
+# -----------------------------
+# ADD MARKERS OR HEATMAP
+# -----------------------------
 if not df.empty:
     if view_type == "Markers":
         for _, r in df.iterrows():
@@ -213,6 +220,9 @@ if not df.empty:
         heat_data = df[["Latitude","Longitude","Sales"]].values.tolist()
         HeatMap(heat_data, radius=15, blur=10, max_zoom=12).add_to(m)
 
+# -----------------------------
+# DYNAMIC LEGEND
+# -----------------------------
 def add_legend(map_obj, category_colors, df):
     categories_present = df["Category"].dropna().unique()
     legend_items = ""
@@ -225,7 +235,7 @@ def add_legend(map_obj, category_colors, df):
     legend_html = f"""
     <div style="
         position: fixed; 
-        bottom: 50px; left: 50px; width: 200px; 
+        bottom: 50px; left: 50px; width: 220px; 
         background-color: rgba(0, 0, 0, 0.6);
         border-radius: 8px;
         z-index:9999; 
@@ -245,6 +255,9 @@ if not df.empty:
 
 folium.LayerControl(collapsed=True).add_to(m)
 
+# -----------------------------
+# STREAMLIT OUTPUT
+# -----------------------------
 st.markdown("### Chicago Sales Map")
 st_folium(m, width=1100, height=650)
 
@@ -266,6 +279,9 @@ st.download_button(
     mime="text/csv"
 )
 
+# -----------------------------
+# REMOVE GREY FADE OVERLAY
+# -----------------------------
 st.markdown("""
     <style>
     .stApp {
@@ -277,6 +293,8 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
 
 
 
