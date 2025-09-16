@@ -54,18 +54,10 @@ def load_data():
     df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
     if "Timestamp" in df.columns:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
-
-    # Normalize categories
-    df["Category"] = df["Category"].replace({
-        "Restaurant": "Restaurant/cafe",
-        "Grocery": "Grocery/Liquor Store"
-    })
-
-    return df.dropna(subset=["Latitude","Longitude"])
+    df = df.dropna(subset=["Latitude","Longitude"])
+    return df
 
 def append_row(name, lat, lng, sales, category, added_by):
-    # Normalize before saving
-    category = category.replace("Restaurant", "Restaurant/cafe").replace("Grocery", "Grocery/Liquor Store")
     sheet.append_row([name, float(lat), float(lng), float(sales), added_by, datetime.utcnow().isoformat(), category])
 
 # Initialize session state for data
@@ -84,7 +76,10 @@ with st.sidebar.form("add_form", clear_on_submit=True):
     lat = st.text_input("Latitude*")
     lng = st.text_input("Longitude*")
     sales = st.number_input("Sales ($)", min_value=0.0, step=10.0)
-    category = st.selectbox("Category*", ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/cafe", "Other"])
+    category = st.selectbox(
+        "Category*",
+        ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/cafe", "Other"]
+    )
     you = st.text_input("Your name", placeholder="optional")
     submit = st.form_submit_button("Add to sheet")
 
@@ -117,8 +112,6 @@ if manual_refresh:
 
 # Auto refresh
 if auto_refresh:
-    st_autorefresh = st.sidebar.empty()
-    st_autorefresh.text(f"⏳ Auto refresh every {refresh_interval} min")
     time.sleep(refresh_interval * 60)
     load_data.clear()
     st.session_state.df = load_data()
@@ -270,15 +263,21 @@ if not df.empty:
     ).reset_index()
     st.dataframe(summary)
 
-st.markdown("### Current Data")
-st.dataframe(df)
+# -----------------------------
+# FIX INDEX TO MATCH GOOGLE SHEETS
+# -----------------------------
+if not df.empty:
+    df = df.reset_index(drop=True)
+    df.index = df.index + 2  # Row 2 in Sheets = first data row
+    st.markdown("### Current Data")
+    st.dataframe(df)
 
-st.download_button(
-    "Download CSV",
-    data=df.to_csv(index=False).encode("utf-8"),
-    file_name="chicago_sales.csv",
-    mime="text/csv"
-)
+    st.download_button(
+        "Download CSV",
+        data=df.to_csv(index=True).encode("utf-8"),
+        file_name="chicago_sales.csv",
+        mime="text/csv"
+    )
 
 # -----------------------------
 # REMOVE GREY FADE OVERLAY
@@ -294,6 +293,8 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
 
 
 
