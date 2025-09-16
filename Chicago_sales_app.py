@@ -55,6 +55,13 @@ def load_data():
     df["Longitude"] = pd.to_numeric(df["Longitude"], errors="coerce")
     if "Timestamp" in df.columns:
         df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+
+    # Normalize categories for consistency
+    df["Category"] = df["Category"].replace({
+        "Restaurant": "Restaurant/Cafe",
+        "Grocery": "Grocery/Liquor Store"
+    })
+
     return df.dropna(subset=["Latitude","Longitude"])
 
 def append_row(name, lat, lng, sales, category, added_by):
@@ -299,3 +306,5 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
