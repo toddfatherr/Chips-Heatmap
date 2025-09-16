@@ -76,7 +76,13 @@ with st.sidebar.form("add_form", clear_on_submit=True):
     lat = st.text_input("Latitude*")
     lng = st.text_input("Longitude*")
     sales = st.number_input("Sales ($)", min_value=0.0, step=10.0)
-    category = st.selectbox("Category*", ["Deli", "Grocery/Liquor Store", "Hotel", "Restaurant/Cafe", "Other"])
+    category = st.selectbox("Category*", [
+        "Deli",
+        "Grocery/Liquor Store",
+        "Hotel",
+        "Restaurant/Cafe",
+        "Other"
+    ])
     you = st.text_input("Your name", placeholder="optional")
     submit = st.form_submit_button("Add to sheet")
 
@@ -293,3 +299,5 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+
